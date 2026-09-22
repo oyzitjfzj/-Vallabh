@@ -1,6 +1,9 @@
 name: Private exact-SHA verification
 
 on:
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       target_sha:
@@ -37,11 +40,13 @@ jobs:
         run: bash tests/test_validate_input.sh
 
       - name: Exact private checkout
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         env:
           PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
         run: bash scripts/checkout-private.sh
 
       - name: Canonical private verification
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: bash scripts/run-private-verifier.sh
