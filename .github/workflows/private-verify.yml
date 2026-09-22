@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - "feat/**"
+      - "verify/request"
   workflow_dispatch:
     inputs:
       target_sha:
@@ -54,7 +56,7 @@ jobs:
           fi
 
   verify:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/verify/request'
     needs: relay-self-test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -65,6 +67,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Resolve verification target
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            target="${{ inputs.target_sha }}"
+          else
+            target="$(tr -d '[:space:]' < verification-target.sha)"
+          fi
+          printf 'TARGET_SHA=%s\n' "$target" >> "$GITHUB_ENV"
 
       - name: Validate immutable target
         shell: bash
