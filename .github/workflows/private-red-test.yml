@@ -61,7 +61,7 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal --no-self-update >/dev/null
           export RUSTUP_TOOLCHAIN=1.98.1
           set +e
-          (cd "$root" && cargo test -p site-gen homepage_story_sections_follow_locked_order) >"$log" 2>&1
+          (cd "$root" && bash tests/test_build_release_contract.sh) >"$log" 2>&1
           rc=$?
           set -e
           if [[ "$rc" -eq 0 ]]; then
