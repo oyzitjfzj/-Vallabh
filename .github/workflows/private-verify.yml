@@ -3,8 +3,11 @@ name: Private exact-SHA verification
 on:
   push:
     branches:
+      - "feat/verification-relay-v2"
+      - "verify/request"
+  pull_request:
+    branches:
       - main
-      - feat/verification-relay-v2
   workflow_dispatch:
     inputs:
       target_sha:
@@ -16,7 +19,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: private-verify-${{ github.event_name }}-${{ inputs.target_sha || github.sha }}
+  group: private-verify-${{ github.event_name }}-${{ inputs.target_sha || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -25,7 +28,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout relay only
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -57,17 +60,29 @@ jobs:
           fi
 
   verify:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/verify/request'
     needs: relay-self-test
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      TARGET_SHA: ${{ inputs.target_sha }}
     steps:
       - name: Checkout relay only
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Resolve verification target
+        shell: bash
+        env:
+          INPUT_TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          set -euo pipefail
+          target="$(
+            GITHUB_EVENT_NAME="$GITHUB_EVENT_NAME" \
+            INPUT_TARGET_SHA="$INPUT_TARGET_SHA" \
+            TARGET_FILE="verification-target.sha" \
+            scripts/resolve-target.sh
+          )"
+          printf 'TARGET_SHA=%s\n' "$target" >> "$GITHUB_ENV"
 
       - name: Validate immutable target
         shell: bash
