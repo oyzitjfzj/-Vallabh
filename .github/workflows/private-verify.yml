@@ -34,6 +34,7 @@ jobs:
           set -euo pipefail
           bash tests/test_validate_input.sh
           bash tests/test_checkout_contract.sh
+          bash tests/test_verifier_privacy_contract.sh
 
       - name: Prove missing credential fails closed
         shell: bash
@@ -74,3 +75,7 @@ jobs:
         env:
           PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
         run: bash scripts/checkout-private.sh
+
+      - name: Canonical private verification
+        shell: bash
+        run: bash scripts/run-private-verifier.sh
