@@ -5,6 +5,7 @@ f=".github/workflows/private-verify.yml"
 test -f "$f"
 grep -Fq 'workflow_dispatch:' "$f"
 grep -Fq 'pull_request:' "$f"
+grep -Fq 'push:' "$f"
 if grep -Fq 'pull_request_target:' "$f"; then
   echo "pull_request_target is forbidden" >&2
   exit 1

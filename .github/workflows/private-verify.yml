@@ -1,6 +1,9 @@
 name: Private exact-SHA verification
 
 on:
+  push:
+    branches:
+      - "feat/**"
   pull_request:
     branches:
       - main
