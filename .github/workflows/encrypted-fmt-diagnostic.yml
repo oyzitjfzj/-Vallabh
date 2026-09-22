@@ -1,0 +1,70 @@
+name: Encrypted private format diagnostic
+
+on:
+  push:
+    branches:
+      - "diagnose/request"
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Exact 40-character private commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: encrypted-private-format-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout relay only
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve diagnostic target
+        shell: bash
+        env:
+          INPUT_TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            target="$INPUT_TARGET_SHA"
+          else
+            test -s diagnostic-target.sha
+            target="$(tr -d '[:space:]' < diagnostic-target.sha)"
+          fi
+          bash scripts/validate-input.sh "$target"
+          printf 'TARGET_SHA=%s\n' "$target" >> "$GITHUB_ENV"
+
+      - name: Exact private checkout
+        shell: bash
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: bash scripts/checkout-private.sh
+
+      - name: Install exact formatter
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt --no-self-update >/dev/null
+          echo "VERIFY_DIAGNOSTIC_TOOLCHAIN_READY=YES"
+
+      - name: Build encrypted diagnostic
+        shell: bash
+        run: bash scripts/run-encrypted-fmt-diagnostic.sh
+
+      - name: Upload ciphertext only
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: encrypted-private-diagnostic
+          path: ${{ runner.temp }}/encrypted.cms
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
