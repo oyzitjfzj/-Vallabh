@@ -41,6 +41,7 @@ jobs:
           bash tests/test_verifier_privacy_contract.sh
           bash tests/test_target_resolution.sh
           bash tests/test_workflow_security_contract.sh
+          bash tests/test_encrypted_diagnostic_contract.sh
 
       - name: Prove missing credential fails closed
         shell: bash
