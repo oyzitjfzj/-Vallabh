@@ -35,3 +35,9 @@ jobs:
       - name: Relay self-test
         shell: bash
         run: bash tests/test_validate_input.sh
+
+      - name: Exact private checkout
+        shell: bash
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: bash scripts/checkout-private.sh
