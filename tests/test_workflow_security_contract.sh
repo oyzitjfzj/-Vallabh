@@ -14,7 +14,7 @@ python - "$f" <<'PY'
 from pathlib import Path
 import sys
 text = Path(sys.argv[1]).read_text()
-for step_name in ("Exact private checkout", "Canonical private verification"):
+for step_name in ("Validate immutable target", "Exact private checkout", "Canonical private verification"):
     marker = f"- name: {step_name}"
     start = text.find(marker)
     if start < 0:

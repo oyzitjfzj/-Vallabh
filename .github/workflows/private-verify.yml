@@ -32,6 +32,7 @@ jobs:
           persist-credentials: false
 
       - name: Validate immutable target
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: bash scripts/validate-input.sh "$TARGET_SHA"
 
