@@ -27,13 +27,14 @@ jobs:
         id: target
         shell: bash
         env:
+          PRIVATE_REPOSITORY: ${{ secrets.PRIVATE_REPOSITORY }}
           PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$PRIVATE_READ_TOKEN"
           echo "::add-mask::$PRIVATE_READ_TOKEN"
 
-          repo="oyzitjfzj/ai-product-web"
+          repo="${PRIVATE_REPOSITORY:-oyzitjfzj/ai-product-web}"
           branch="feat/site-core-release"
           auth="$(printf 'x-access-token:%s' "$PRIVATE_READ_TOKEN" | base64 -w0)"
           echo "::add-mask::$auth"
