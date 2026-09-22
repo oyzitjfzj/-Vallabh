@@ -8,7 +8,7 @@ on:
     inputs:
       target_sha:
         description: Exact 40-character private commit SHA
-        required: true
+        required: false
         type: string
 
 permissions:
@@ -59,23 +59,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      TARGET_SHA: ${{ inputs.target_sha }}
+      TARGET_SHA_INPUT: ${{ inputs.target_sha }}
+      PRIVATE_SHA: ${{ secrets.PRIVATE_SHA }}
     steps:
       - name: Checkout relay only
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Validate immutable target
+      - name: Resolve immutable target
+        id: target
         shell: bash
-        run: bash scripts/validate-input.sh "$TARGET_SHA"
+        run: |
+          set -euo pipefail
+          target="${TARGET_SHA_INPUT:-${PRIVATE_SHA:-}}"
+          bash scripts/validate-input.sh "$target"
+          echo "value=$target" >> "$GITHUB_OUTPUT"
+          echo "VERIFY_TARGET_OK=$target"
 
       - name: Exact private checkout
         shell: bash
         env:
+          TARGET_SHA: ${{ steps.target.outputs.value }}
           PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
         run: bash scripts/checkout-private.sh
 
       - name: Canonical private verification
         shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.value }}
         run: bash scripts/run-private-verifier.sh
