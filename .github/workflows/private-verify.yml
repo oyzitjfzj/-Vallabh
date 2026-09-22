@@ -1,6 +1,9 @@
 name: Private exact-SHA verification
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       target_sha:
@@ -12,16 +15,50 @@ permissions:
   contents: read
 
 concurrency:
-  group: private-verify-${{ inputs.target_sha }}
+  group: private-verify-${{ github.event_name }}-${{ inputs.target_sha || github.sha }}
   cancel-in-progress: false
 
 jobs:
+  relay-self-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout relay only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate relay scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/test_validate_input.sh
+          bash tests/test_checkout_contract.sh
+
+      - name: Prove missing credential fails closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          valid_sha=0123456789abcdef0123456789abcdef01234567
+          set +e
+          TARGET_SHA="$valid_sha" PRIVATE_READ_TOKEN='' RUNNER_TEMP="$RUNNER_TEMP/missing-secret" \
+            bash scripts/checkout-private.sh >"$RUNNER_TEMP/missing-secret.out" 2>&1
+          status=$?
+          set -e
+          test "$status" -eq 65
+          grep -Fxq 'VERIFY_ACCESS_MISSING_CREDENTIAL' "$RUNNER_TEMP/missing-secret.out"
+          if grep -Fq 'oyzitjfzj/ai-product-web' "$RUNNER_TEMP/missing-secret.out"; then
+            echo 'VERIFY_PRIVACY_FAILURE' >&2
+            exit 1
+          fi
+
   verify:
+    if: github.event_name == 'workflow_dispatch'
+    needs: relay-self-test
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       TARGET_SHA: ${{ inputs.target_sha }}
-      PRIVATE_REPOSITORY: oyzitjfzj/ai-product-web
     steps:
       - name: Checkout relay only
         uses: actions/checkout@v4
@@ -32,6 +69,8 @@ jobs:
         shell: bash
         run: bash scripts/validate-input.sh "$TARGET_SHA"
 
-      - name: Relay self-test
+      - name: Exact private checkout
         shell: bash
-        run: bash tests/test_validate_input.sh
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: bash scripts/checkout-private.sh
