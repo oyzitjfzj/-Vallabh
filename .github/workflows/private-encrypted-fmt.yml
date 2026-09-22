@@ -1,0 +1,136 @@
+name: Encrypted private rustfmt diagnostic
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/private-encrypted-fmt.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: encrypted-private-rustfmt
+  cancel-in-progress: false
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout current private work snapshot
+        shell: bash
+        env:
+          PRIVATE_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_TOKEN"
+          echo "::add-mask::$PRIVATE_TOKEN"
+
+          mkdir target
+          cd target
+          git init -q
+          git remote add origin "https://github.com/oyzitjfzj/ai-product-web.git"
+
+          auth="$(printf 'x-access-token:%s' "$PRIVATE_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          log="$RUNNER_TEMP/private-checkout.log"
+          set +e
+          git -c http.extraHeader="AUTHORIZATION: basic $auth" \
+            fetch -q --depth=1 origin refs/heads/feat/site-core-release >"$log" 2>&1
+          rc=$?
+          set -e
+          if [[ "$rc" -ne 0 ]]; then
+            echo "FMT_DIAG_PRIVATE_CHECKOUT=FAIL"
+            exit 1
+          fi
+
+          git checkout -q --detach FETCH_HEAD >"$log" 2>&1
+          actual="$(git rev-parse HEAD)"
+          echo "::add-mask::$actual"
+          printf '%s' "$actual" > "$RUNNER_TEMP/private_snapshot_sha"
+          proof="$(printf '%s' "$actual" | sha256sum | awk '{print $1}')"
+          echo "FMT_DIAG_SNAPSHOT_PROOF=$proof"
+          unset PRIVATE_TOKEN auth
+
+      - name: Install exact Rust formatter
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.1 --profile minimal >/dev/null
+          rustup component add --toolchain 1.98.1 rustfmt >/dev/null
+          echo "FMT_DIAG_TOOLCHAIN=READY"
+
+      - name: Build encrypted formatting patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd target
+          bundle="$RUNNER_TEMP/fmt-bundle"
+          mkdir -p "$bundle"
+
+          set +e
+          cargo +1.98.1 fmt --all -- --check >/dev/null 2>&1
+          before_rc=$?
+          set -e
+
+          cargo +1.98.1 fmt --all >/dev/null
+          cargo +1.98.1 fmt --all -- --check >/dev/null
+          git diff --check >/dev/null
+          git diff --binary -- '*.rs' > "$bundle/rustfmt.diff"
+          git diff --name-only -- '*.rs' > "$bundle/rustfmt-paths.txt"
+          cp "$RUNNER_TEMP/private_snapshot_sha" "$bundle/snapshot-sha.txt"
+
+          count="$(wc -l < "$bundle/rustfmt-paths.txt" | tr -d ' ')"
+          echo "FMT_DIAG_CHECK_BEFORE_RC=$before_rc"
+          echo "FMT_DIAG_CHANGED_COUNT=$count"
+          test "$count" -gt 0
+
+          cat > "$RUNNER_TEMP/recipient-cert.pem" <<'EOF_CERT'
+-----BEGIN CERTIFICATE-----
+MIIENzCCAp+gAwIBAgIUc6KqWEUpi962ocn8vCxWjFI3fngwDQYJKoZIhvcNAQEL
+BQAwKzEpMCcGA1UEAwwgVmFsbGFiaCBlcGhlbWVyYWwgZm10IGRpYWdub3N0aWMw
+HhcNMjYwOTIyMjMwMDE1WhcNMjYwOTIzMjMwMDE1WjArMSkwJwYDVQQDDCBWYWxs
+YWJoIGVwaGVtZXJhbCBmbXQgZGlhZ25vc3RpYzCCAaIwDQYJKoZIhvcNAQEBBQAD
+ggGPADCCAYoCggGBALUSuaupXsghTtw6OQ11Vim2BEEx6cY5ONcbsg9VleOoofKr
+HI3H7yosX0pBtplt3zcKEptUnIbO0353RJd/+8a3pcrFgVZUb4o+HYErV7cxSTO2
+ULhcf+0d6C2Ak+QTY95liCc0D2FZCENCWQe1eVibQIcITFSlAP05UThBJ5BQJevV
+W+WG8aU6vWk5Rw6iADRTrJRbO5Bq/wLT+zAX0wodZCEdhpDuj6EUK7bogsYD72bd
+HdbqeN36j5oJXbqgI8r5LG4lGXx8Nw+EY0DSAvXJLyVidCNOMcxEANQq87dLVqHn
+YS/bRuzozQh3m+5YbY9blzH4JrjBWwHYOVJzYdUDFhC6hYNgTwK8lsl/dWyYItY6
+eiRiwox2cEOcwZtEfDkonhmRBMd+GNlkZqXZjGkIhfvsmMcCQB7/v6CHC6bkljkB
+Z9OKLwkmtIH4rEZP0/GPh9pzl70LIbD/ITHHjHJ4eL3mU5kfEaHbzUKDcmUyczyX
+mj5o327lzG4CXNKkqwIDAQABo1MwUTAdBgNVHQ4EFgQUlGwuNYUco83Ge39cAcPo
+lIQc/AAwHwYDVR0jBBgwFoAUlGwuNYUco83Ge39cAcPolIQc/AAwDwYDVR0TAQH/
+BAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAYEAkMY6hqWZ3eYlEgCcZCbB0WZ1ekJJ
+rD+xB38ga6MsM4gEmlz8Ksc1LyR/rPJd6L15Kcf5NdcqP3TwBL606LzRJuitTCMN
+JC2le7DyKhkC0ym7oOLvT42iojRT8P2wJVSWLp6AltvJ6bBUiQHXNeobzU5PGjrZ
+BwJd0TWndOTNTJaRCTOTtqTF2S6dZI1asXkBvGVIMnmUEtZKbLVtp63xjJUnL2Su
+vqv5E0rKAjjeuZUBlAG4lAGHRIJLtu7eZUyDwK8ighQRTWNsn8KVMyCdJh96NVCt
+D/scLMDM0HhJaxLdKhUQKfm6o0qQMWReGEq116AYwAHGCXbP65JaPe8d0uvADANg
+AWqi54yM6yoOajGgS3+jbPC+4N4YT8KCBcqKjpCn1VJ75vnNsrryuny+tgrgbzC0
+BWAuQeSSE+3lCemnUdhR402lKm6Wd/v63f64O40sNPvaB28rDIFwkThAoWOmZQAb
+o6kwaY8OA8ENThoeUxtN3HxfQnB2eeNWEuOR
+-----END CERTIFICATE-----
+EOF_CERT
+
+          fp="$(openssl x509 -in "$RUNNER_TEMP/recipient-cert.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
+          test "$fp" = "72:47:E8:77:49:10:CB:05:34:0E:23:E9:32:FD:B5:A0:15:4F:18:CD:87:BF:8F:BE:7E:0E:5A:95:96:0D:31:F4"
+          tar -C "$bundle" -czf "$RUNNER_TEMP/private-fmt.tgz" .
+          openssl cms -encrypt -binary -aes-256-cbc \
+            -outform DER \
+            -in "$RUNNER_TEMP/private-fmt.tgz" \
+            -out "$RUNNER_TEMP/encrypted-fmt.cms" \
+            "$RUNNER_TEMP/recipient-cert.pem"
+
+          rm -rf "$bundle" "$RUNNER_TEMP/private-fmt.tgz" "$RUNNER_TEMP/recipient-cert.pem"
+          echo "FMT_DIAG_CIPHERTEXT_READY=YES"
+
+      - name: Upload ciphertext only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: encrypted-private-rustfmt
+          path: ${{ runner.temp }}/encrypted-fmt.cms
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
