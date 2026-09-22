@@ -1,0 +1,70 @@
+name: Current private branch verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "RUN_VERIFY"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-private-website-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout relay only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve current private work snapshot
+        id: target
+        shell: bash
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_READ_TOKEN"
+          echo "::add-mask::$PRIVATE_READ_TOKEN"
+
+          repo="oyzitjfzj/ai-product-web"
+          branch="feat/site-core-release"
+          auth="$(printf 'x-access-token:%s' "$PRIVATE_READ_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          log="$RUNNER_TEMP/private-resolve.log"
+
+          set +e
+          line="$(git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" \
+            ls-remote "https://github.com/${repo}.git" "refs/heads/${branch}" 2>"$log")"
+          rc=$?
+          set -e
+
+          if [[ "$rc" -ne 0 ]]; then
+            echo "VERIFY_TARGET_RESOLVE=FAIL"
+            exit 69
+          fi
+
+          sha="$(printf '%s\n' "$line" | awk 'NR==1 {print $1}')"
+          bash scripts/validate-input.sh "$sha"
+          echo "value=$sha" >> "$GITHUB_OUTPUT"
+          echo "VERIFY_TARGET_OK=$sha"
+          unset PRIVATE_READ_TOKEN auth
+
+      - name: Exact private checkout
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.value }}
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: bash scripts/checkout-private.sh
+
+      - name: Canonical private verification
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.value }}
+        run: bash scripts/run-private-verifier.sh
