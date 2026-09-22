@@ -1,5 +1,5 @@
 name: Encrypted private rustfmt diagnostic
-# rerun: platform-contract-red
+# rerun: site-check-green
 
 on:
   push:
