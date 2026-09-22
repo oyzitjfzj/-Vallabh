@@ -1,5 +1,5 @@
 name: Encrypted private rustfmt diagnostic
-# rerun: site-check-green
+# rerun: site-check-clippy
 
 on:
   push:
@@ -59,7 +59,7 @@ jobs:
         run: |
           set -euo pipefail
           rustup toolchain install 1.98.1 --profile minimal >/dev/null
-          rustup component add --toolchain 1.98.1 rustfmt >/dev/null
+          rustup component add --toolchain 1.98.1 rustfmt clippy >/dev/null
           echo "FMT_DIAG_TOOLCHAIN=READY"
 
       - name: Build encrypted formatting patch
@@ -85,7 +85,13 @@ jobs:
           count="$(wc -l < "$bundle/rustfmt-paths.txt" | tr -d ' ')"
           echo "FMT_DIAG_CHECK_BEFORE_RC=$before_rc"
           echo "FMT_DIAG_CHANGED_COUNT=$count"
-          test "$count" -gt 0
+
+          set +e
+          cargo +1.98.1 clippy --workspace --all-targets -- -D warnings >"$bundle/clippy.log" 2>&1
+          clippy_rc=$?
+          set -e
+          printf '%s\n' "$clippy_rc" > "$bundle/clippy.rc"
+          echo "FMT_DIAG_CLIPPY_RC=$clippy_rc"
 
           cat > "$RUNNER_TEMP/recipient-cert.pem" <<'EOF_CERT'
           -----BEGIN CERTIFICATE-----
