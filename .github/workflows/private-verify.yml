@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feat/verification-relay-v2
   workflow_dispatch:
     inputs:
       target_sha:
@@ -35,6 +36,7 @@ jobs:
           bash tests/test_validate_input.sh
           bash tests/test_checkout_contract.sh
           bash tests/test_verifier_privacy_contract.sh
+          bash tests/test_target_resolution.sh
 
       - name: Prove missing credential fails closed
         shell: bash
