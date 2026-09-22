@@ -1,0 +1,52 @@
+name: Private exact-SHA verification
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Exact 40-character private commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: private-verify-${{ inputs.target_sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TARGET_SHA: ${{ inputs.target_sha }}
+      PRIVATE_REPOSITORY: oyzitjfzj/ai-product-web
+    steps:
+      - name: Checkout relay only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate immutable target
+        shell: bash
+        run: bash scripts/validate-input.sh "$TARGET_SHA"
+
+      - name: Relay self-test
+        shell: bash
+        run: bash tests/test_validate_input.sh
+
+      - name: Exact private checkout
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: bash scripts/checkout-private.sh
+
+      - name: Canonical private verification
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: bash scripts/run-private-verifier.sh
