@@ -41,3 +41,7 @@ jobs:
         env:
           PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
         run: bash scripts/checkout-private.sh
+
+      - name: Canonical private verification
+        shell: bash
+        run: bash scripts/run-private-verifier.sh
