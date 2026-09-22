@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "feat/**"
+      - "verify/request"
   pull_request:
     branches:
       - main
@@ -34,8 +35,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve verification target
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/verify/request'
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            target="${{ inputs.target_sha }}"
+          else
+            target="$(tr -d '[:space:]' < verification-target.sha)"
+          fi
+          printf 'TARGET_SHA=%s\n' "$target" >> "$GITHUB_ENV"
+
       - name: Validate immutable target
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/verify/request'
         shell: bash
         run: bash scripts/validate-input.sh "$TARGET_SHA"
 
@@ -44,13 +56,13 @@ jobs:
         run: bash tests/test_validate_input.sh
 
       - name: Exact private checkout
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/verify/request'
         shell: bash
         env:
           PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
         run: bash scripts/checkout-private.sh
 
       - name: Canonical private verification
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/verify/request'
         shell: bash
         run: bash scripts/run-private-verifier.sh
