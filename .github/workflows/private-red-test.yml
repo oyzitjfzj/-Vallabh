@@ -1,0 +1,71 @@
+name: Expected RED contract proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/private-red-test.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  prove-red:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout relay only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve current private work snapshot
+        id: target
+        shell: bash
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_READ_TOKEN"
+          echo "::add-mask::$PRIVATE_READ_TOKEN"
+          repo="oyzitjfzj/ai-product-web"
+          branch="feat/site-core-release"
+          auth="$(printf 'x-access-token:%s' "$PRIVATE_READ_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          log="$RUNNER_TEMP/red-resolve.log"
+          set +e
+          line="$(git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth"             ls-remote "https://github.com/${repo}.git" "refs/heads/${branch}" 2>"$log")"
+          rc=$?
+          set -e
+          test "$rc" -eq 0
+          sha="$(printf '%s\n' "$line" | awk 'NR==1 {print $1}')"
+          bash scripts/validate-input.sh "$sha"
+          echo "value=$sha" >> "$GITHUB_OUTPUT"
+          echo "TDD_TARGET_OK=$sha"
+
+      - name: Exact private checkout
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.value }}
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: bash scripts/checkout-private.sh
+
+      - name: Prove targeted test is RED
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.value }}
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/private-source"
+          log="$RUNNER_TEMP/tdd-red.log"
+          rustup toolchain install 1.98.1 --profile minimal --no-self-update >/dev/null
+          export RUSTUP_TOOLCHAIN=1.98.1
+          set +e
+          (cd "$root" && cargo test -p site-model rejects_absolute_trust_claims) >"$log" 2>&1
+          rc=$?
+          set -e
+          if [[ "$rc" -eq 0 ]]; then
+            echo "TDD_RED_NOT_OBSERVED"
+            exit 1
+          fi
+          echo "TDD_RED_OBSERVED=YES"
