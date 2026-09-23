@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/private-red-test.yml"
       - "VERIFY_BRANCH"
+      - "RUN_RED"
 
 permissions:
   contents: read
@@ -65,10 +66,9 @@ jobs:
           test -f "$command_file"
           rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update >/dev/null
           export RUSTUP_TOOLCHAIN=1.98.1
-          command="$(cat "$command_file")"
-          test -n "$command"
+          test -s "$command_file"
           set +e
-          (cd "$root" && bash -lc "$command") >"$log" 2>&1
+          (cd "$root" && bash .ci/test-command) >"$log" 2>&1
           rc=$?
           set -e
           if [[ "$rc" -eq 0 ]]; then
