@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/private-red-test.yml"
+      - "VERIFY_BRANCH"
 
 permissions:
   contents: read
@@ -30,7 +31,8 @@ jobs:
           test -n "$PRIVATE_READ_TOKEN"
           echo "::add-mask::$PRIVATE_READ_TOKEN"
           repo="oyzitjfzj/ai-product-web"
-          branch="feat/site-core-release"
+          branch="$(tr -d '\r\n' < VERIFY_BRANCH)"
+          test -n "$branch"
           auth="$(printf 'x-access-token:%s' "$PRIVATE_READ_TOKEN" | base64 -w0)"
           echo "::add-mask::$auth"
           log="$RUNNER_TEMP/red-resolve.log"
