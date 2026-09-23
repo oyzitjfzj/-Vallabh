@@ -1,1 +1,1 @@
-verify-current-private-head:strict-release-manifest-rustfmt
+verify-current-private-head:strict-release-manifest-fixtures
