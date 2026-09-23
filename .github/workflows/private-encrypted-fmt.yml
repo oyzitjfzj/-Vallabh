@@ -43,8 +43,7 @@ jobs:
           echo "::add-mask::$auth"
           log="$RUNNER_TEMP/private-checkout.log"
           set +e
-          git -c http.extraHeader="AUTHORIZATION: basic $auth" \
-            branch="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERIFY_BRANCH")"
+          branch="$(tr -d '\r\n' < "$GITHUB_WORKSPACE/VERIFY_BRANCH")"
           test -n "$branch"
           git -c http.extraHeader="AUTHORIZATION: basic $auth" \
             fetch -q --depth=1 origin "refs/heads/$branch" >"$log" 2>&1
