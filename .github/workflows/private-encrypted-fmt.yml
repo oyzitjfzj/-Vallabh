@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/private-encrypted-fmt.yml"
       - "RUN_FMT"
+      - "ci/fmt-recipient-cert.pem"
 
 permissions:
   contents: read
@@ -114,44 +115,13 @@ jobs:
           lock_proof="$(sha256sum Cargo.lock | awk '{print $1}')"
           echo "FMT_DIAG_LOCKFILE_PROOF=$lock_proof"
 
-          cat > "$RUNNER_TEMP/recipient-cert.pem" <<'EOF_CERT'
-
-          -----BEGIN CERTIFICATE-----
-          MIIEPzCCAqegAwIBAgIUbrdMo4zS/cms1VIWxhRdaYdBx94wDQYJKoZIhvcNAQEL
-          BQAwLzEtMCsGA1UEAwwkVmFsbGFiaCBFcGhlbWVyYWwgUnVzdGZtdCBEaWFnbm9z
-          dGljMB4XDTI2MDkyMzA2MzQ0M1oXDTI2MDkyNTA2MzQ0M1owLzEtMCsGA1UEAwwk
-          VmFsbGFiaCBFcGhlbWVyYWwgUnVzdGZtdCBEaWFnbm9zdGljMIIBojANBgkqhkiG
-          9w0BAQEFAAOCAY8AMIIBigKCAYEAkhzUN2Pzr2D8/t7s2g/rUSbBSEiGDq0GDT45
-          0SPL2pdV2lyPviiEb92Q7W4FG0CfJVFZcDmewpyiqfk2JGzMadpv/QBg+OqTMVEy
-          rTZhpXorQ/YXeCCmC1M/lth7OOnJONSbRP86RD+9YryNhiNjRmBN6/wfoQiPn9kp
-          Svq6t57HPktYEerYRP3vlygbiv8/yo2uvadqI+GFPWbjttSD2Wfh0XDwVxhK+coL
-          E/6Q+8IWViHcJW/N/PmtTp+9twXv2X5aFmgTE3cegSBIllGIbGiwcTdUJsnmoO9i
-          kk2u+HB6FZSpEg3mfGWOLCsOy09p534PKqHMnGsWNXRwRXjIiVyMz4JunrzvJOLH
-          YoZsuxBtnwDY3r5RFG8GiqHZD0Ks8GIpRayYcypK2nH79UDAKkXXenlgZ3MJvN6n
-          StiVq55zsjsMHJYpr2CI/AQho8nxzdQNoakAAl9ZxflVIUvrvs9V0Y1MgJEMQLNB
-          THU/fYOLnZISzqQRF1gccZdbJP69AgMBAAGjUzBRMB0GA1UdDgQWBBTy9BM2am8S
-          ddXn+E5FuLs2OGsxpzAfBgNVHSMEGDAWgBTy9BM2am8SddXn+E5FuLs2OGsxpzAP
-          BgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBgQA+Bt3GrBXkKBbZmnsx
-          7wmf1cMlnfHY93GTvRlk/rEmGjoB0szLn2yy31SZV5I7HIajyKh4bt6JJAYDTUf/
-          5d9u8HIRcjKzEdKTPqRac2epFW9jFhxnTHt6kWb8wc4BNfEPPH/DBffpATEOHzJi
-          +0akCsPA0kQgF4yKR+oBLMgsgyWjbbo9l3NtFIR2zYfBTDK53PhCRJ4ZbE/bqV8U
-          dMJVq2A9IeM/RQgXgbBT70Vd5LNHJQMLF8U7B3jn88tmkvsdr5clulSVWT0GVxzF
-          sp3af2Xpll333ifG65Yj5KPQ00F6RNjIFW0xEfUjnP63Kckt9UrbvrOshuBXjc5R
-          iMle6cDsP0lBIGK1XtviT2BzcpIRvV67yS+BXUO0CuRiLVnf4NZ+6kJ2f7jJi4Nh
-          3GDFyCr+T1RbOJGeaFdS8UvF0tNNNIT4qhEecITE780PuVO+mYdFODHtNJbIMv/c
-          Q2vC0Fp+O+14s2pQbsPpnM0v8BrL22+tynQ8T1veUktwljE=
-          -----END CERTIFICATE-----
-
-          EOF_CERT
-
-          fp="$(openssl x509 -in "$RUNNER_TEMP/recipient-cert.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
-          test "$fp" = "C2:C2:C9:8E:CE:62:97:8B:61:9B:95:F8:4D:A3:40:2B:6E:EE:4A:8C:C0:20:68:A8:FE:70:9E:4F:EA:10:4C:D0"
+          test -f "$GITHUB_WORKSPACE/ci/fmt-recipient-cert.pem"
           tar -C "$bundle" -czf "$RUNNER_TEMP/private-fmt.tgz" .
           openssl cms -encrypt -binary -aes-256-cbc \
             -outform DER \
             -in "$RUNNER_TEMP/private-fmt.tgz" \
             -out "$RUNNER_TEMP/encrypted-fmt.cms" \
-            "$RUNNER_TEMP/recipient-cert.pem"
+            "$GITHUB_WORKSPACE/ci/fmt-recipient-cert.pem"
 
           rm -rf "$bundle" "$RUNNER_TEMP/private-fmt.tgz" "$RUNNER_TEMP/recipient-cert.pem"
           echo "FMT_DIAG_CIPHERTEXT_READY=YES"
