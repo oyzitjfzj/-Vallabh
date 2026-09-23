@@ -59,10 +59,14 @@ jobs:
           set -euo pipefail
           root="$RUNNER_TEMP/private-source"
           log="$RUNNER_TEMP/tdd-red.log"
-          rustup toolchain install 1.98.1 --profile minimal --no-self-update >/dev/null
+          command_file="$root/.ci/test-command"
+          test -f "$command_file"
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update >/dev/null
           export RUSTUP_TOOLCHAIN=1.98.1
+          command="$(cat "$command_file")"
+          test -n "$command"
           set +e
-          (cd "$root" && bash tests/test_build_release_contract.sh) >"$log" 2>&1
+          (cd "$root" && bash -lc "$command") >"$log" 2>&1
           rc=$?
           set -e
           if [[ "$rc" -eq 0 ]]; then
