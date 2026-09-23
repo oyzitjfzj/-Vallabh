@@ -61,7 +61,7 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal --no-self-update >/dev/null
           export RUSTUP_TOOLCHAIN=1.98.1
           set +e
-          (cd "$root" && cargo +1.98.1 test -p site-gen generated_site_has_quiet_policy_footer) >"$log" 2>&1
+          (cd "$root" && cargo +1.98.1 test -p release-manifest parses_optional_release_metadata) >"$log" 2>&1
           rc=$?
           set -e
           if [[ "$rc" -eq 0 ]]; then
