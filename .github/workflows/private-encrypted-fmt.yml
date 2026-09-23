@@ -102,6 +102,13 @@ jobs:
           printf '%s\n' "$clippy_rc" > "$bundle/clippy.rc"
           echo "FMT_DIAG_CLIPPY_RC=$clippy_rc"
 
+          set +e
+          cargo +1.98.1 test --workspace --locked >"$bundle/test.log" 2>&1
+          test_rc=$?
+          set -e
+          printf '%s\n' "$test_rc" > "$bundle/test.rc"
+          echo "FMT_DIAG_TEST_RC=$test_rc"
+
           test -f Cargo.lock
           cp Cargo.lock "$bundle/Cargo.lock"
           lock_proof="$(sha256sum Cargo.lock | awk '{print $1}')"
