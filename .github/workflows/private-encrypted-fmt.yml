@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/private-encrypted-fmt.yml"
+      - "RUN_FMT"
 
 permissions:
   contents: read
