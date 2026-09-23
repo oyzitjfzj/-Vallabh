@@ -1,4 +1,5 @@
 name: Expected RED contract proof
+# target: launch-locked-release-gate
 
 on:
   push:
