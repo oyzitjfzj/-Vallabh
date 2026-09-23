@@ -61,7 +61,7 @@ jobs:
           rustup toolchain install 1.98.1 --profile minimal --no-self-update >/dev/null
           export RUSTUP_TOOLCHAIN=1.98.1
           set +e
-          (cd "$root" && cargo +1.98.1 test -p site-gen omits_canonical_metadata_until_origin_exists) >"$log" 2>&1
+          (cd "$root" && bash tests/test_security_headers_contract.sh) >"$log" 2>&1
           rc=$?
           set -e
           if [[ "$rc" -eq 0 ]]; then
