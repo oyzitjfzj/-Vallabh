@@ -20,6 +20,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - name: Checkout relay only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - name: Checkout current private work snapshot
         shell: bash
         env:
