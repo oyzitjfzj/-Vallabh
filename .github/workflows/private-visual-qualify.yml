@@ -1,0 +1,158 @@
+name: Public-safe visual qualification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/private-visual-qualify.yml"
+      - "RUN_VISUAL"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vallabh-public-safe-visual
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout relay only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve current private work snapshot
+        id: target
+        shell: bash
+        env:
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$PRIVATE_READ_TOKEN"
+          echo "::add-mask::$PRIVATE_READ_TOKEN"
+
+          branch="$(tr -d '\r\n' < VERIFY_BRANCH)"
+          test -n "$branch"
+          auth="$(printf 'x-access-token:%s' "$PRIVATE_READ_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          log="$RUNNER_TEMP/visual-resolve.log"
+
+          set +e
+          line="$(git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" \
+            ls-remote "https://github.com/oyzitjfzj/ai-product-web.git" "refs/heads/${branch}" 2>"$log")"
+          rc=$?
+          set -e
+
+          if [[ "$rc" -ne 0 ]]; then
+            echo "VISUAL_TARGET_RESOLVE=FAIL"
+            exit 69
+          fi
+
+          sha="$(printf '%s\n' "$line" | awk 'NR==1 {print $1}')"
+          bash scripts/validate-input.sh "$sha"
+          echo "value=$sha" >> "$GITHUB_OUTPUT"
+          echo "VISUAL_TARGET_OK=$sha"
+          unset PRIVATE_READ_TOKEN auth
+
+      - name: Exact private checkout
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.target.outputs.value }}
+          PRIVATE_READ_TOKEN: ${{ secrets.PRIVATE_READ_TOKEN }}
+        run: bash scripts/checkout-private.sh
+
+      - name: Install exact Rust toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy --no-self-update >"$RUNNER_TEMP/rustup.log" 2>&1
+          echo "VISUAL_TOOLCHAIN=rust-1.98.1"
+
+      - name: Build public-safe site output
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/private-source"
+          RUSTUP_TOOLCHAIN=1.98.1 bash scripts/build-release.sh >"$RUNNER_TEMP/site-build.log" 2>&1
+          echo "VISUAL_BUILD=PASS"
+
+      - name: Capture desktop and mobile renders
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser=""
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              browser="$(command -v "$candidate")"
+              break
+            fi
+          done
+          if [[ -z "$browser" ]]; then
+            echo "VISUAL_BROWSER_MISSING"
+            exit 1
+          fi
+
+          mkdir -p "$RUNNER_TEMP/visual"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$RUNNER_TEMP/private-source/dist" >"$RUNNER_TEMP/http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+          for _ in {1..20}; do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then
+              break
+            fi
+            sleep 0.25
+          done
+          curl -fsS http://127.0.0.1:4173/ >/dev/null
+
+          capture() {
+            local name="$1"
+            local size="$2"
+            local url="$3"
+            "$browser" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --disable-dev-shm-usage \
+              --hide-scrollbars \
+              --window-size="$size" \
+              --screenshot="$RUNNER_TEMP/visual/$name.png" \
+              "$url" >"$RUNNER_TEMP/$name.chrome.log" 2>&1
+            test -s "$RUNNER_TEMP/visual/$name.png"
+          }
+
+          capture home-desktop "1440,5000" "http://127.0.0.1:4173/"
+          capture home-mobile "390,7200" "http://127.0.0.1:4173/"
+          capture product-desktop "1440,3600" "http://127.0.0.1:4173/product/"
+          capture product-mobile "390,5000" "http://127.0.0.1:4173/product/"
+          capture capabilities-desktop "1440,4800" "http://127.0.0.1:4173/capabilities/"
+          capture capabilities-mobile "390,6200" "http://127.0.0.1:4173/capabilities/"
+          capture trust-desktop "1440,4200" "http://127.0.0.1:4173/trust/"
+          capture trust-mobile "390,5400" "http://127.0.0.1:4173/trust/"
+          capture download-desktop "1440,2600" "http://127.0.0.1:4173/download/"
+          capture download-mobile "390,3600" "http://127.0.0.1:4173/download/"
+          capture releases-desktop "1440,2600" "http://127.0.0.1:4173/releases/"
+          capture releases-mobile "390,3600" "http://127.0.0.1:4173/releases/"
+          capture security-desktop "1440,3000" "http://127.0.0.1:4173/security/"
+          capture security-mobile "390,4200" "http://127.0.0.1:4173/security/"
+          capture privacy-desktop "1440,3000" "http://127.0.0.1:4173/privacy/"
+          capture privacy-mobile "390,4200" "http://127.0.0.1:4173/privacy/"
+          capture terms-desktop "1440,3000" "http://127.0.0.1:4173/terms/"
+          capture terms-mobile "390,4200" "http://127.0.0.1:4173/terms/"
+          capture support-desktop "1440,3000" "http://127.0.0.1:4173/support/"
+          capture support-mobile "390,4200" "http://127.0.0.1:4173/support/"
+
+          echo "VISUAL_CAPTURE=PASS"
+          sha256sum "$RUNNER_TEMP"/visual/*.png | sed 's#'"$RUNNER_TEMP"'/visual/##'
+
+      - name: Upload screenshots only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: public-safe-site-renders
+          path: ${{ runner.temp }}/visual/*.png
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
